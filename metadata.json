@@ -1,0 +1,8 @@
+{
+  "name": "CargoIQ(main)",
+  "description": "Profit-optimized delivery routing system for local vendors with Hindi voice support and real-time driver tracking.",
+  "requestFramePermissions": [
+    "geolocation",
+    "microphone"
+  ]
+}
