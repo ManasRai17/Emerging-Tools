@@ -1,0 +1,61 @@
+{
+  "orders": [
+    {
+      "id": "1775656880871",
+      "item": "AATA",
+      "quantity": 1,
+      "unit": "kg",
+      "destination": "Jaipur",
+      "unitPrice": 100,
+      "status": "pending"
+    }
+  ],
+  "drivers": [
+    {
+      "id": "1775655193518",
+      "name": "abith",
+      "phone": "46551726",
+      "vehicleNumber": "3 vB 2",
+      "vehicleType": "tata ",
+      "currentLocation": "303007",
+      "capacity": 1000,
+      "status": "available"
+    }
+  ],
+  "routes": [
+    {
+      "id": "route-1775650015272-0",
+      "driverId": "1775650006187",
+      "orders": [
+        {
+          "id": "1775649976680",
+          "item": "30",
+          "quantity": 80,
+          "unit": "kg",
+          "destination": "Bhankrota",
+          "price": 100,
+          "status": "pending",
+          "score": 140
+        },
+        {
+          "id": "1775649976686",
+          "item": "Rice",
+          "quantity": 67,
+          "unit": "kg",
+          "destination": "Dudu",
+          "price": 100,
+          "status": "pending",
+          "score": 140
+        }
+      ],
+      "status": "assigned",
+      "timestamp": "2026-04-08T12:06:55.272Z"
+    }
+  ],
+  "driverLocations": {},
+  "settings": {
+    "locationName": "Warehouse",
+    "address": "Manipal University Jaipur",
+    "pincode": "303007"
+  }
+}

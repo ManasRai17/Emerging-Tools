@@ -148,7 +148,8 @@ const App: React.FC = () => {
     let current = startCoords;
     
     route.orders.forEach(order => {
-      const match = order.location.match(/\d{6}/);
+      const locStr = order.location || order.destination || "";
+      const match = locStr.match(/\d{6}/);
       const pin = match ? match[0] : null;
       const coords = pin ? PINCODE_COORDS[pin] : null;
       
@@ -179,28 +180,37 @@ const App: React.FC = () => {
   };
 
   const calculateProfit = () => {
-    const FUEL_COST_PER_KM = 8;
-    const DRIVER_FIXED_COST = 300;
+    // Orders that are heavily selected for optimization OR already mathematically mapped out into an active fleet operation
+    const activeOrders = orders.filter(o => o.status === 'assigned' || selectedOrderIds.includes(o.id));
     
-    let totalRevenue = 0;
-    let totalCost = 0;
+    // Revenue maps directly out from base logic quantity index multiplied by generic fallback unitPrice assumptions
+    const revenue = activeOrders.reduce((sum, order) => {
+      const activeUnitPrice = order.unitPrice || order.price || order.value || 100;
+      return sum + ((order.quantity || 1) * activeUnitPrice);
+    }, 0);
+
+    // Calculate Costs based explicitly around actual Google Route Distances if generated, natively defaulting otherwise
+    let estimatedCost = 0;
+    if (routes.length > 0) {
+      const FUEL_COST_PER_KM = 8;
+      const DRIVER_FIXED_COST = 300;
+      routes.forEach(route => {
+        if (route.status === 'assigned' || route.status === 'in-progress' || route.status === 'completed') {
+          const dist = getRouteDistance(route);
+          estimatedCost += (dist * FUEL_COST_PER_KM) + DRIVER_FIXED_COST;
+        }
+      });
+    } else {
+      // 40% margin operational costs proxy when purely hypothetical
+      estimatedCost = revenue * 0.4;
+    }
     
-    routes.forEach(route => {
-      // Revenue from all orders in the route
-      const routeRevenue = route.orders.reduce((sum, order) => sum + (order.value || 0), 0);
-      totalRevenue += routeRevenue;
-      
-      // Cost for the route
-      const distance = getRouteDistance(route);
-      const routeCost = (distance * FUEL_COST_PER_KM) + DRIVER_FIXED_COST;
-      totalCost += routeCost;
-    });
+    const profit = revenue - estimatedCost;
     
-    const profit = totalRevenue - totalCost;
     return {
       profit: Math.round(profit),
-      revenue: Math.round(totalRevenue),
-      cost: Math.round(totalCost)
+      revenue: Math.round(revenue),
+      cost: Math.round(estimatedCost)
     };
   };
 
@@ -251,6 +261,7 @@ const App: React.FC = () => {
       setVoiceInput("");
     } catch (err) {
       console.error("AI Parsing failed", err);
+      setStatusMessage({ text: "Could not understand the order. Please try again.", type: 'error' });
     } finally {
       setIsRecording(false);
     }
@@ -550,20 +561,26 @@ const App: React.FC = () => {
                              <Package size={24} />}
                           </div>
                           <div>
-                            <h3 className="font-medium">{order.itemName} ({order.quantity} {order.unit})</h3>
+                            <h3 className="font-medium">{order.item || order.itemName} ({order.quantity} {order.unit})</h3>
                             <div className="flex items-center gap-2 text-sm text-stone-500">
                               <MapPin size={14} />
-                              {order.location}
+                              {order.destination || order.location}
                             </div>
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="font-semibold text-emerald-600">₹{order.value}</div>
-                          <div className={`text-xs font-medium uppercase tracking-wider ${
-                            order.priority === 'Emergency' ? 'text-red-600' :
-                            order.priority === 'Urgent' ? 'text-orange-600' : 'text-stone-400'
+                          <div className="font-semibold text-emerald-600 flex flex-col items-end">
+                            <span className="text-lg">₹{(order.quantity || 1) * (order.unitPrice || order.price || order.value || 100)}</span>
+                            <span className="text-[10px] text-stone-400 font-medium tracking-wide">
+                              {order.quantity || 1} {order.unit || 'unit'} × ₹{order.unitPrice || order.price || order.value || 100}
+                            </span>
+                          </div>
+                          <div className={`text-xs font-medium uppercase tracking-wider mt-1 ${
+                            (order.status === 'Emergency' || order.priority === 'Emergency') ? 'text-red-600' :
+                            (order.status === 'Urgent' || order.priority === 'Urgent') ? 'text-orange-600' : 
+                            (order.status === 'NORMAL' ? 'text-blue-600' : 'text-stone-400')
                           }`}>
-                            {order.priority}
+                            {order.status === 'pending' ? (order.priority || 'NORMAL') : (order.status || order.priority)}
                           </div>
                         </div>
                       </div>
@@ -606,7 +623,7 @@ const App: React.FC = () => {
                       return true;
                     }).map(route => {
                       const driver = drivers.find(d => d.id === route.driverId);
-                      const waypoints = route.orders.map(o => encodeURIComponent(o.location)).join('|');
+                      const waypoints = route.orders.map(o => encodeURIComponent(o.location || o.destination || '')).join('|');
                       const startLoc = settings?.pincode || settings?.address || 'Karol Bagh, Delhi';
                       const encodedStart = encodeURIComponent(startLoc);
                       const mapUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodedStart}&destination=${encodedStart}&waypoints=${waypoints}`;
@@ -661,7 +678,7 @@ const App: React.FC = () => {
                           <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                             {route.orders.map(order => (
                               <div key={order.id} className="flex-shrink-0 px-3 py-1.5 bg-stone-100 rounded-lg text-xs text-stone-600 border border-stone-200">
-                                {order.location}
+                                {order.destination || order.location}
                               </div>
                             ))}
                           </div>
@@ -731,7 +748,7 @@ const App: React.FC = () => {
                     </div>
                     <div className="mt-6 pt-4 border-t border-emerald-800 flex items-center gap-2 text-emerald-300 text-sm">
                       <TrendingUp size={16} />
-                      Based on {routes.length} active routes
+                      Based on {orders.length} orders and {routes.length} active routes
                     </div>
                   </div>
                   <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-emerald-800 rounded-full blur-3xl opacity-50" />
@@ -916,25 +933,28 @@ const App: React.FC = () => {
                       </div>
                     </div>
 
-                    {routes.filter(r => r.driverId === activeDriverId && r.status === 'assigned').map(route => {
-                      const waypoints = route.orders.map(o => encodeURIComponent(o.location)).join('|');
-                      const startLoc = settings?.pincode || settings?.address || 'Karol Bagh, Delhi';
-                      const encodedStart = encodeURIComponent(startLoc);
-                      const mapUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodedStart}&destination=${encodedStart}&waypoints=${waypoints}`;
-                      
-                      return (
-                        <a 
-                          key={`map-${route.id}`}
-                          href={mapUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mb-8 w-full py-4 bg-emerald-50 text-emerald-700 rounded-2xl font-bold border border-emerald-100 flex items-center justify-center gap-2 hover:bg-emerald-100 transition-all"
-                        >
-                          <Navigation size={20} />
-                          Open Full Route in Maps
-                        </a>
-                      );
-                    })}
+                    {(() => {
+                      const route = routes.find(r => r.driverId === activeDriverId && r.status === 'assigned');
+                      if (route) {
+                        const waypoints = route.orders.map(o => encodeURIComponent(o.location || o.destination || '')).join('|');
+                        const startLoc = settings?.pincode || settings?.address || 'Karol Bagh, Delhi';
+                        const encodedStart = encodeURIComponent(startLoc);
+                        const mapUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodedStart}&destination=${encodedStart}&waypoints=${waypoints}`;
+                        
+                        return (
+                          <a 
+                            href={mapUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mb-8 w-full py-4 bg-emerald-50 text-emerald-700 rounded-2xl font-bold border border-emerald-100 flex items-center justify-center gap-2 hover:bg-emerald-100 transition-all"
+                          >
+                            <Navigation size={20} />
+                            Open Full Route in Maps
+                          </a>
+                        );
+                      }
+                      return null;
+                    })()}
                     
                     <div className="space-y-8 relative">
                      <div className="absolute left-4 top-8 bottom-8 w-0.5 bg-stone-100" />
@@ -951,11 +971,12 @@ const App: React.FC = () => {
                             <div className="absolute left-2.5 top-1.5 w-3.5 h-3.5 rounded-full bg-stone-300 border-4 border-white shadow-sm" />
                             <div className="flex justify-between items-start">
                               <div>
-                                <div className="font-semibold">{order.location}</div>
+                                <div className="text-xs text-stone-500 mb-1">Destination</div>
+                                <div className="font-semibold">{order.destination || order.location}</div>
                                 <div className="text-sm text-stone-500">{order.itemName} (x{order.quantity})</div>
                               </div>
                               <a 
-                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.location)}`}
+                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.destination || order.location || '')}`}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="p-2 bg-emerald-50 text-emerald-600 rounded-lg"

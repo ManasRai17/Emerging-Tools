@@ -1,13 +1,17 @@
 export interface Order {
   id: string;
-  itemName: string;
+  itemName?: string;
+  item?: string;
   quantity: number;
   unit: string;
-  location: string;
-  value: number;
-  priority: 'Low' | 'Normal' | 'Urgent' | 'Emergency';
+  location?: string;
+  destination?: string;
+  value?: number;
+  price?: number;
+  unitPrice?: number;
+  priority?: 'Low' | 'Normal' | 'Urgent' | 'Emergency' | string;
   deadline?: string;
-  status: 'pending' | 'assigned' | 'delivered';
+  status?: 'pending' | 'assigned' | 'delivered' | 'NORMAL' | string;
   selected?: boolean;
   score?: number;
 }

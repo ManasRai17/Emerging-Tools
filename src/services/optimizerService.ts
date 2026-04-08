@@ -31,34 +31,44 @@ export async function optimizeRoutesNode(
 
   // Calculate scores and sort orders by priority
   const priorityWeights: Record<string, number> = {
-    'Low': 1,
-    'Normal': 2,
-    'Urgent': 3,
-    'Emergency': 4
+    'low': 1,
+    'normal': 2,
+    'urgent': 3,
+    'emergency': 4
   };
   const PRIORITY_MULTIPLIER = 20;
 
   const scoredOrders = orders.map(o => ({
     ...o,
-    score: (o.value || 0) + (priorityWeights[o.priority as keyof typeof priorityWeights] || 0) * PRIORITY_MULTIPLIER
+    score: ((o.quantity || 1) * (o.unitPrice || o.price || o.value || 100)) + (priorityWeights[String(o.status || o.priority || 'Normal').toLowerCase()] || 2) * PRIORITY_MULTIPLIER
   })).sort((a, b) => (b.score || 0) - (a.score || 0));
 
-  const locations = [shopLocation, ...scoredOrders.map(o => o.location)];
+  const locations = [shopLocation, ...scoredOrders.map(o => o.location || (o as any).destination)];
   
   try {
     // 1. Get Distance Matrix
-    const response = await client.distancematrix({
-      params: {
-        origins: locations,
-        destinations: locations,
-        key: apiKey,
-        mode: "driving" as any
-      }
-    });
+    let matrix;
+    
+    if (apiKey && apiKey.length > 5) {
+      const response = await client.distancematrix({
+        params: {
+          origins: locations,
+          destinations: locations,
+          key: apiKey,
+          mode: "driving" as any
+        }
+      });
 
-    const matrix = response.data.rows.map(row => 
-      row.elements.map(el => el.distance?.value || 0)
-    );
+      matrix = response.data.rows.map(row => 
+        row.elements.map(el => el.distance?.value || 0)
+      );
+    } else {
+      console.log("Mocking routing distance matrix because API key is absent.");
+      // Dummy distances, 3000-8000m randomly structured.
+      matrix = Array(locations.length).fill(0).map((_, i) => 
+        Array(locations.length).fill(0).map((_, j) => i === j ? 0 : 3000 + (Math.abs(i - j) * 800))
+      );
+    }
 
     // 2. Clarke-Wright Savings Algorithm
     const numOrders = scoredOrders.length;
